@@ -39,3 +39,7 @@ add_library(customAllReduceKernels
     ${tensorrt_llm_SOURCE_DIR}/cpp/tensorrt_llm/kernels/customAllReduceKernels.cu)
 target_link_libraries(customAllReduceKernels PRIVATE common_src)
 
+find_package(MPI REQUIRED)
+
+add_executable(custom_allreduce_test test_custom_allreduce.cu)
+target_link_libraries(custom_allreduce_test PRIVATE customAllReduceKernels MPI::MPI_CXX)
