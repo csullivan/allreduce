@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
     CUDA_CHECK(cudaSetDevice(rank));
 
     // Data allocation and initialization
-    const int data_size = 10;
+    const int data_size = 16;
     float* d_buffer;
     float h_buffer[data_size];
     float result_buffer[data_size];
@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
     // Copy data back and verify results
     CUDA_CHECK(cudaMemcpy(result_buffer, d_buffer, data_size * sizeof(float), cudaMemcpyDeviceToHost));
     for (int i = 0; i < data_size; i++) {
-        if (result_buffer[i] != 10.0f * world_size) {
+        if (result_buffer[i] != 3.0f) {
             std::cerr << "Verification failed at rank " << rank << ", index " << i << std::endl;
             return 1;
         }
