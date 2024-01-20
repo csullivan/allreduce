@@ -41,5 +41,5 @@ target_link_libraries(customAllReduceKernels PRIVATE common_src)
 
 find_package(MPI REQUIRED)
 
-add_executable(test_ipcmem test_ipcmem.cu)
-target_link_libraries(test_ipcmem PRIVATE customAllReduceKernels MPI::MPI_CXX)
+add_executable(test_allreduce test_allreduce.cu)
+target_link_libraries(test_allreduce PRIVATE customAllReduceKernels MPI::MPI_CXX)

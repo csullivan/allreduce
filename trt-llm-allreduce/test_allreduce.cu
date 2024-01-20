@@ -7,6 +7,12 @@
 
 #include "tensorrt_llm/kernels/customAllReduceKernels.h"
 
+const char* RED = "\033[31m";
+const char* GREEN = "\033[32m";
+const char* YELLOW = "\033[33m";
+const char* BOLD_RED = "\033[1;31m";
+const char *RESET = "\033[0m";
+  
 #define CUDA_CHECK(call)                                                       \
   {                                                                            \
     cudaError_t cudaStatus = call;                                             \
@@ -16,57 +22,6 @@
       assert(cudaStatus != cudaSuccess);                                       \
     }                                                                          \
   }
-
-int test_single_ipc_memory(int world_size, int rank) {
-    
-    const size_t ipcBufferSize = 50331648; 
-    void* localBufferPtr;
-    CUDA_CHECK(cudaMalloc(&localBufferPtr, ipcBufferSize));
-    CUDA_CHECK(cudaMemset(localBufferPtr, 0, ipcBufferSize));
-
-    
-    cudaIpcMemHandle_t localHandle;
-    CUDA_CHECK(cudaIpcGetMemHandle(&localHandle, localBufferPtr));
-
-    
-    char serializedHandle[CUDA_IPC_HANDLE_SIZE];
-    memcpy(serializedHandle, localHandle.reserved, CUDA_IPC_HANDLE_SIZE);
-
-    
-    char* allHandles = new char[CUDA_IPC_HANDLE_SIZE * world_size];
-    MPI_Allgather(serializedHandle, CUDA_IPC_HANDLE_SIZE, MPI_BYTE,
-                  allHandles, CUDA_IPC_HANDLE_SIZE, MPI_BYTE,
-                  MPI_COMM_WORLD);
-
-    
-    std::vector<void*> ipcHandles(world_size);
-    for (int i = 0; i < world_size; ++i) {
-        if (i == rank) {
-            ipcHandles[i] = localBufferPtr; 
-        } else {
-          
-          cudaIpcMemHandle_t foreignHandle;
-          memcpy(foreignHandle.reserved, &allHandles[i * CUDA_IPC_HANDLE_SIZE], CUDA_IPC_HANDLE_SIZE);
-          
-          CUDA_CHECK(cudaIpcOpenMemHandle(&ipcHandles[i], foreignHandle, cudaIpcMemLazyEnablePeerAccess));
-        }
-    }
-
-    
-    
-
-    
-    for (int i = 0; i < world_size; ++i) {
-        if (i != rank) {
-          CUDA_CHECK(cudaIpcCloseMemHandle(ipcHandles[i]));
-        }
-    }
-    cudaFree(localBufferPtr);
-
-    delete[] allHandles;
-
-    return 0;
-}
 
 class CUDAIpcMemory {
 public:
@@ -183,7 +138,7 @@ tensorrt_llm::kernels::AllReduceStrategyType selectImplementation(size_t message
     return AllReduceStrategyType::RING;
 }
 
-int test_multiple_ipc_memory(int world_size, int rank) {
+int test_one_shot_allreduce(int world_size, int rank) {
     const size_t IPC_BUFFERS_SIZE = 50331648; 
     const size_t IPC_BARRIERS_SIZE_PER_GPU = 25 * 4; 
     const int tpSize = world_size;
@@ -232,26 +187,37 @@ int test_multiple_ipc_memory(int world_size, int rank) {
     CUDA_CHECK(cudaMemcpy(d_buffer, h_buffer, data_size * sizeof(float), cudaMemcpyHostToDevice));
 
     
-    size_t messageSize = data_size * sizeof(float);
+    size_t message_size = data_size * sizeof(float);
 
     
-    auto strategy = selectImplementation(messageSize, world_size);
+    auto strategy = selectImplementation(message_size, world_size);
 
     
     cudaStream_t stream(0);
     tensorrt_llm::kernels::invokeMultiGpuBarrier(params, stream);
 
-    // TODO(csullivan): Enable the all reduce
-    // CUDA_CHECK(cudaMemcpyAsync(
-    //              params.peer_comm_buffer_ptrs[rank], d_buffer, size * sizePerElem, cudaMemcpyDeviceToDevice, stream));
+    CUDA_CHECK(cudaMemcpyAsync(
+                 params.peer_comm_buffer_ptrs[rank], d_buffer, message_size, cudaMemcpyDeviceToDevice, stream));
 
-    // // Invoke the all-reduce operation
-    // tensorrt_llm::kernels::customAllReduce(params, d_buffer, data_size, sizeof(float),
-    //                                        tensorrt_llm::common::datatype_enum::TYPE_FP32,
-    //                                        strategy, 0);
+    tensorrt_llm::kernels::customAllReduce(params, d_buffer, data_size, sizeof(float),
+                                           tensorrt_llm::common::datatype_enum::TYPE_FP32,
+                                           strategy, 0);
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    // TODO(csullivan): Add assert all_close
+    CUDA_CHECK(cudaMemcpy(result_buffer, d_buffer, message_size, cudaMemcpyDeviceToHost));
+    float expected = 0.0;
+    for (int rank = 0; rank < world_size; rank++) {
+      expected += (rank + 1);
+    }
+    for (int i = 0; i < data_size; i++) {
+      if (result_buffer[i] != expected) {
+        std::cerr << BOLD_RED << "Verification failed at rank " << rank << ", index " << i <<  RESET << std::endl;
+        std::cerr << BOLD_RED << "~~~~~~> " << result_buffer[i] << " != " << expected << RESET << std::endl;
+        return 1;
+      }
+    }
+
+    CUDA_CHECK(cudaFree(d_buffer));
     return 0;
 }
 
@@ -263,8 +229,12 @@ int main(int argc, char* argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   cudaSetDevice(rank);
   
-  // test_single_ipc_memory(world_size, rank);
-  test_multiple_ipc_memory(world_size, rank);
+  if (test_one_shot_allreduce(world_size, rank)) {
+    std::cout << RED << "[FAILED]" << YELLOW << " test_one_shot_allreduce" << RESET << std::endl;
+  } else {
+    std::cout << GREEN << "[PASSED]" << YELLOW << " test_one_shot_allreduce" << RESET << std::endl;
+  }
   MPI_Finalize();
+  
   return 0;
 }
