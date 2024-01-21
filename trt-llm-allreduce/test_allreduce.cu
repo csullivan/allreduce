@@ -13,15 +13,6 @@ const char* YELLOW = "\033[33m";
 const char* BOLD_RED = "\033[1;31m";
 const char *RESET = "\033[0m";
   
-#define CUDA_CHECK(call)                                                       \
-  {                                                                            \
-    cudaError_t cudaStatus = call;                                             \
-    if (cudaStatus != cudaSuccess) {                                           \
-      std::cerr << "CUDA error at line " << __LINE__ << ": "                   \
-                << cudaGetErrorString(cudaStatus) << std::endl;                \
-      assert(cudaStatus != cudaSuccess);                                       \
-    }                                                                          \
-  }
 
 class CUDAIpcMemory {
 public:
@@ -55,12 +46,12 @@ CUDAIpcMemory::~CUDAIpcMemory() {
 
 void CUDAIpcMemory::allocateAndShare() {
     
-  CUDA_CHECK(cudaMalloc(&localBufferPtr, bufferSize));
-  CUDA_CHECK(cudaMemset(localBufferPtr, 0, bufferSize));
+  cudaMalloc(&localBufferPtr, bufferSize);
+  cudaMemset(localBufferPtr, 0, bufferSize);
 
     
   cudaIpcMemHandle_t localHandle;
-  CUDA_CHECK(cudaIpcGetMemHandle(&localHandle, localBufferPtr));
+  cudaIpcGetMemHandle(&localHandle, localBufferPtr);
     char serializedHandle[CUDA_IPC_HANDLE_SIZE];
     memcpy(serializedHandle, localHandle.reserved, CUDA_IPC_HANDLE_SIZE);
 
@@ -77,7 +68,7 @@ void CUDAIpcMemory::allocateAndShare() {
         } else {
           cudaIpcMemHandle_t foreignHandle;
           memcpy(foreignHandle.reserved, &allHandles[i * CUDA_IPC_HANDLE_SIZE], CUDA_IPC_HANDLE_SIZE);
-          CUDA_CHECK(cudaIpcOpenMemHandle(&ipcHandles[i], foreignHandle, cudaIpcMemLazyEnablePeerAccess));
+          cudaIpcOpenMemHandle(&ipcHandles[i], foreignHandle, cudaIpcMemLazyEnablePeerAccess);
         }
     }
 }
@@ -85,7 +76,7 @@ void CUDAIpcMemory::allocateAndShare() {
 void CUDAIpcMemory::deallocate() {
     for (int i = 0; i < worldSize; ++i) {
         if (i != rank) {
-          CUDA_CHECK(cudaIpcCloseMemHandle(ipcHandles[i]));
+          cudaIpcCloseMemHandle(ipcHandles[i]);
         }
     }
     cudaFree(localBufferPtr);
@@ -203,8 +194,8 @@ void CustomAllReduce::enqueue(float* d_buffer, size_t dataSize) {
     cudaStream_t stream(0);
     tensorrt_llm::kernels::invokeMultiGpuBarrier(params, stream);
 
-    CUDA_CHECK(cudaMemcpyAsync(
-                 params.peer_comm_buffer_ptrs[m_rank], d_buffer, messageSize, cudaMemcpyDeviceToDevice, stream));
+    cudaMemcpyAsync(
+                 params.peer_comm_buffer_ptrs[m_rank], d_buffer, messageSize, cudaMemcpyDeviceToDevice, stream);
 
     tensorrt_llm::kernels::customAllReduce(params, d_buffer, dataSize, sizeof(float),
                                            tensorrt_llm::common::datatype_enum::TYPE_FP32,
@@ -217,19 +208,19 @@ int test_one_shot_allreduce(int world_size, int rank) {
     float* d_buffer;
     float h_buffer[data_size];
     float result_buffer[data_size];
-    CUDA_CHECK(cudaMalloc(&d_buffer, data_size * sizeof(float)));
+    cudaMalloc(&d_buffer, data_size * sizeof(float));
     for (int i = 0; i < data_size; i++) {
         h_buffer[i] = static_cast<float>(rank + 1);
     }
-    CUDA_CHECK(cudaMemcpy(d_buffer, h_buffer, data_size * sizeof(float), cudaMemcpyHostToDevice));
+    cudaMemcpy(d_buffer, h_buffer, data_size * sizeof(float), cudaMemcpyHostToDevice);
 
 
     CustomAllReduce allReduce(world_size, rank);
     allReduce.enqueue(d_buffer, data_size);
 
     
-    CUDA_CHECK(cudaDeviceSynchronize());
-    CUDA_CHECK(cudaMemcpy(result_buffer, d_buffer, data_size * sizeof(float), cudaMemcpyDeviceToHost));
+    cudaDeviceSynchronize();
+    cudaMemcpy(result_buffer, d_buffer, data_size * sizeof(float), cudaMemcpyDeviceToHost);
     float expected = 0.0;
     for (int rank = 0; rank < world_size; rank++) {
       expected += (rank + 1);
@@ -242,7 +233,7 @@ int test_one_shot_allreduce(int world_size, int rank) {
       }
     }
 
-    CUDA_CHECK(cudaFree(d_buffer));
+    cudaFree(d_buffer);
     return 0;
 }
 
