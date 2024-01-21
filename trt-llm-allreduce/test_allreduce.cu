@@ -100,7 +100,60 @@ void* const* CUDAIpcMemory::getIpcHandles() const {
   return const_cast<void**>(ipcHandles.data());
 }
 
-tensorrt_llm::kernels::AllReduceStrategyType selectImplementation(size_t messageSize, int worldSize) noexcept
+class CustomAllReduce {
+public:
+  CustomAllReduce(int worldSize, int rank);
+  ~CustomAllReduce();
+
+  void enqueue(float* d_buffer, size_t dataSize);
+
+private:
+  int m_world_size;
+  int m_rank;
+  unsigned int m_flag_value;
+  CUDAIpcMemory m_buffer_ptrs;
+  CUDAIpcMemory m_input_barriers;
+  CUDAIpcMemory m_output_barriers;
+  static const size_t IPC_BUFFERS_SIZE = 50331648; 
+  static const size_t IPC_BARRIERS_SIZE_PER_GPU = 25 * 4; 
+
+  
+  tensorrt_llm::kernels::AllReduceParams setupParams();
+  tensorrt_llm::kernels::AllReduceStrategyType selectImplementation(size_t messageSize, int worldSize) noexcept;
+};
+
+CustomAllReduce::CustomAllReduce(int worldSize, int rank)
+  : m_world_size(worldSize), m_rank(rank), m_flag_value(2112),
+  m_buffer_ptrs(IPC_BUFFERS_SIZE, worldSize, rank),
+  m_input_barriers(IPC_BARRIERS_SIZE_PER_GPU * worldSize, worldSize, rank),
+  m_output_barriers(IPC_BARRIERS_SIZE_PER_GPU * worldSize, worldSize, rank)
+{}
+
+CustomAllReduce::~CustomAllReduce() {}
+
+tensorrt_llm::kernels::AllReduceParams CustomAllReduce::setupParams() {
+  tensorrt_llm::kernels::AllReduceParams params;
+    void* const* buffer_ptrs = m_buffer_ptrs.getIpcHandles();
+    for (int i = 0; i < m_world_size; ++i) {
+        params.peer_comm_buffer_ptrs[i] = buffer_ptrs[i];
+    }
+    void* const* barrier_ptrs_in = m_input_barriers.getIpcHandles();
+    for (int i = 0; i < m_world_size; ++i) {
+        params.peer_barrier_ptrs_in[i] = reinterpret_cast<uint32_t*>(barrier_ptrs_in[i]);
+    }
+    void* const* barrier_ptrs_out = m_output_barriers.getIpcHandles();
+    for (int i = 0; i < m_world_size; ++i) {
+        params.peer_barrier_ptrs_out[i] = reinterpret_cast<uint32_t*>(barrier_ptrs_out[i]);
+    }
+    params.barrier_flag = m_flag_value;
+    params.ranks_per_node = m_world_size;
+    params.rank = m_rank;
+    params.local_rank = m_rank;
+
+    return params;
+}
+
+tensorrt_llm::kernels::AllReduceStrategyType CustomAllReduce::selectImplementation(size_t messageSize, int worldSize) noexcept
 {
     using namespace tensorrt_llm::kernels;
     if (worldSize <= 2)
@@ -138,73 +191,45 @@ tensorrt_llm::kernels::AllReduceStrategyType selectImplementation(size_t message
     return AllReduceStrategyType::RING;
 }
 
+void CustomAllReduce::enqueue(float* d_buffer, size_t dataSize) {
+   m_flag_value++; // Increment the flag value
+
+    auto params = setupParams();
+    params.barrier_flag = m_flag_value;
+
+    size_t messageSize = dataSize * sizeof(float);
+    auto strategy = selectImplementation(messageSize, m_world_size);
+
+    cudaStream_t stream(0);
+    tensorrt_llm::kernels::invokeMultiGpuBarrier(params, stream);
+
+    CUDA_CHECK(cudaMemcpyAsync(
+                 params.peer_comm_buffer_ptrs[m_rank], d_buffer, messageSize, cudaMemcpyDeviceToDevice, stream));
+
+    tensorrt_llm::kernels::customAllReduce(params, d_buffer, dataSize, sizeof(float),
+                                           tensorrt_llm::common::datatype_enum::TYPE_FP32,
+                                           strategy, 0);
+}
+
+
 int test_one_shot_allreduce(int world_size, int rank) {
-    const size_t IPC_BUFFERS_SIZE = 50331648; 
-    const size_t IPC_BARRIERS_SIZE_PER_GPU = 25 * 4; 
-    const int tpSize = world_size;
-
-    
-    CUDAIpcMemory BufferPtrs(IPC_BUFFERS_SIZE, world_size, rank);
-    CUDAIpcMemory BarriersIn(IPC_BARRIERS_SIZE_PER_GPU * tpSize, world_size, rank);
-    CUDAIpcMemory BarriersOut(IPC_BARRIERS_SIZE_PER_GPU * tpSize, world_size, rank);
-
-    void* const* buffer_ptrs = BufferPtrs.getIpcHandles();
-    void* const* barrier_ptrs_in = BarriersIn.getIpcHandles();
-    void* const* barrier_ptrs_out = BarriersOut.getIpcHandles();
-    tensorrt_llm::kernels::AllReduceParams params;
-
-    
-    for (int i = 0; i < tpSize; ++i) {
-        params.peer_comm_buffer_ptrs[i] = buffer_ptrs[i];
-    }
-    for (int i = 0; i < tpSize; ++i) {
-        params.peer_barrier_ptrs_in[i] = reinterpret_cast<uint32_t*>(barrier_ptrs_in[i]);
-    }
-    for (int i = 0; i < tpSize; ++i) {
-        params.peer_barrier_ptrs_out[i] = reinterpret_cast<uint32_t*>(barrier_ptrs_out[i]);
-    }
-
-    params.barrier_flag = 123;;
-    params.ranks_per_node = tpSize;
-    params.rank = rank;
-    params.local_rank = rank;
-
-
-    
-    
     const int data_size = 16;
     float* d_buffer;
     float h_buffer[data_size];
     float result_buffer[data_size];
-
-    
     CUDA_CHECK(cudaMalloc(&d_buffer, data_size * sizeof(float)));
-
-    
     for (int i = 0; i < data_size; i++) {
         h_buffer[i] = static_cast<float>(rank + 1);
     }
     CUDA_CHECK(cudaMemcpy(d_buffer, h_buffer, data_size * sizeof(float), cudaMemcpyHostToDevice));
 
-    
-    size_t message_size = data_size * sizeof(float);
+
+    CustomAllReduce allReduce(world_size, rank);
+    allReduce.enqueue(d_buffer, data_size);
 
     
-    auto strategy = selectImplementation(message_size, world_size);
-
-    
-    cudaStream_t stream(0);
-    tensorrt_llm::kernels::invokeMultiGpuBarrier(params, stream);
-
-    CUDA_CHECK(cudaMemcpyAsync(
-                 params.peer_comm_buffer_ptrs[rank], d_buffer, message_size, cudaMemcpyDeviceToDevice, stream));
-
-    tensorrt_llm::kernels::customAllReduce(params, d_buffer, data_size, sizeof(float),
-                                           tensorrt_llm::common::datatype_enum::TYPE_FP32,
-                                           strategy, 0);
     CUDA_CHECK(cudaDeviceSynchronize());
-
-    CUDA_CHECK(cudaMemcpy(result_buffer, d_buffer, message_size, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(result_buffer, d_buffer, data_size * sizeof(float), cudaMemcpyDeviceToHost));
     float expected = 0.0;
     for (int rank = 0; rank < world_size; rank++) {
       expected += (rank + 1);
