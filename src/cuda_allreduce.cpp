@@ -34,43 +34,37 @@ tensorrt_llm::kernels::AllReduceParams CustomAllReduce::setupParams() {
     return params;
 }
 
-int CustomAllReduce::selectImplementation(size_t messageSize, int worldSize) noexcept
-{
-    using namespace tensorrt_llm::kernels;
+int CustomAllReduce::selectImplementation(size_t messageSize, int worldSize) noexcept {
+  using namespace tensorrt_llm::kernels;
 
-    AllReduceStrategyType strategy;
-    if (worldSize <= 2)
-    {
-        if (messageSize < 16 * 1000 * 1000)
-        {
-            strategy = AllReduceStrategyType::ONESHOT;
-        }
-    }
-    else if (worldSize > 2 && worldSize <= 4)
-    {
-        if (messageSize < 1 * 1000 * 1000)
-        {
-            strategy = AllReduceStrategyType::ONESHOT;
-        }
-        if (messageSize < 8 * 1000 * 1000)
-        {
-            strategy = AllReduceStrategyType::TWOSHOT;
-        }
-    }
-    else if (worldSize > 4)
-    {
-        if (messageSize < 500 * 1000)
-        {
-            strategy = AllReduceStrategyType::ONESHOT;
-        }
-        if (messageSize < 8 * 1000 * 1000)
-        {
-            strategy = AllReduceStrategyType::TWOSHOT;
-        }
+  AllReduceStrategyType strategy;
+  if (worldSize <= 2) {
+    if (messageSize < 16 * 1000 * 1000) {
+      strategy = AllReduceStrategyType::ONESHOT;
     } else {
       strategy = AllReduceStrategyType::RING;
     }
-    return static_cast<int>(strategy); 
+  } else if (worldSize > 2 && worldSize <= 4) {
+    if (messageSize < 1 * 1000 * 1000) {
+      strategy = AllReduceStrategyType::ONESHOT;
+    } else if (messageSize < 8 * 1000 * 1000) {
+      strategy = AllReduceStrategyType::TWOSHOT;
+    } else {
+      strategy = AllReduceStrategyType::RING;
+    }
+
+  } else if (worldSize > 4) {
+    if (messageSize < 500 * 1000) {
+      strategy = AllReduceStrategyType::ONESHOT;
+    } else if (messageSize < 8 * 1000 * 1000) {
+      strategy = AllReduceStrategyType::TWOSHOT;
+    } else {
+      strategy = AllReduceStrategyType::RING;
+    }
+  } else {
+    strategy = AllReduceStrategyType::RING;
+  }
+  return static_cast<int>(strategy);
 }
 
 void CustomAllReduce::enqueue(float* d_buffer, size_t dataSize) {
