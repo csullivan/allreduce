@@ -54,11 +54,6 @@ macro(find_nccl use_nccl)
   if (Nccl_FOUND)
     message(STATUS "Found NCCL_LIBRARY: ${NCCL_LIBRARY}")
     message(STATUS "Found NCCL_INCLUDE_DIR: ${NCCL_INCLUDE_DIR}")
-    add_library(nccl SHARED IMPORTED)
-    set_target_properties(nccl
-      PROPERTIES
-      INTERFACE_INCLUDE_DIRECTORIES "${NCCL_INCLUDE_DIR}"
-      IMPORTED_LOCATION             "${NCCL_LIBRARY}")
   else()
     message(STATUS "NCCL not found")
   endif()
@@ -66,7 +61,7 @@ macro(find_nccl use_nccl)
 endmacro(find_nccl)
 
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include ${NCCL_INCLUDE_DIR})
 set(LIBRARY_FILES
     src/cuda_ipc_memory.cpp
     src/cuda_allreduce.cpp
@@ -76,7 +71,7 @@ find_nccl(/usr)
 target_link_libraries(trtllm_allreduce PRIVATE 
     CUDA::cudart
     customAllReduceKernels 
-    nccl
+    ${NCCL_LIBRARY}
 )
 set(TEST_SOURCE_FILES
     tests/test_cuda_allreduce.cpp

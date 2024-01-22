@@ -1,8 +1,13 @@
 #pragma once
 
-#include "tensorrt_llm/kernels/customAllReduceKernels.h"
-
 #include "cuda_ipc_memory.h"
+#include <nccl.h>
+
+namespace tensorrt_llm {
+namespace kernels {
+    struct AllReduceParams;
+}
+}
 
 class CustomAllReduce {
 public:
@@ -22,6 +27,6 @@ private:
   static const size_t IPC_BARRIERS_SIZE_PER_GPU = 25 * 4; 
 
   tensorrt_llm::kernels::AllReduceParams setupParams();
-  tensorrt_llm::kernels::AllReduceStrategyType selectImplementation(size_t messageSize, int worldSize) noexcept;
+  int selectImplementation(size_t messageSize, int worldSize) noexcept;
 };
 

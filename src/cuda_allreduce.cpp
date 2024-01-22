@@ -1,5 +1,8 @@
 #include "cuda_allreduce.h"
 
+#include "tensorrt_llm/kernels/customAllReduceKernels.h"
+
+
 CustomAllReduce::CustomAllReduce(int worldSize, int rank, ncclComm_t ncclComm)
   : m_world_size(worldSize), m_rank(rank), m_flag_value(2112),
     m_buffer_ptrs(IPC_BUFFERS_SIZE, worldSize, rank, ncclComm),
@@ -31,42 +34,43 @@ tensorrt_llm::kernels::AllReduceParams CustomAllReduce::setupParams() {
     return params;
 }
 
-tensorrt_llm::kernels::AllReduceStrategyType CustomAllReduce::selectImplementation(size_t messageSize, int worldSize) noexcept
+int CustomAllReduce::selectImplementation(size_t messageSize, int worldSize) noexcept
 {
     using namespace tensorrt_llm::kernels;
+
+    AllReduceStrategyType strategy;
     if (worldSize <= 2)
     {
         if (messageSize < 16 * 1000 * 1000)
         {
-            return AllReduceStrategyType::ONESHOT;
+            strategy = AllReduceStrategyType::ONESHOT;
         }
     }
-
-    if (worldSize > 2 && worldSize <= 4)
+    else if (worldSize > 2 && worldSize <= 4)
     {
         if (messageSize < 1 * 1000 * 1000)
         {
-            return AllReduceStrategyType::ONESHOT;
+            strategy = AllReduceStrategyType::ONESHOT;
         }
         if (messageSize < 8 * 1000 * 1000)
         {
-            return AllReduceStrategyType::TWOSHOT;
+            strategy = AllReduceStrategyType::TWOSHOT;
         }
     }
-
-    if (worldSize > 4)
+    else if (worldSize > 4)
     {
         if (messageSize < 500 * 1000)
         {
-            return AllReduceStrategyType::ONESHOT;
+            strategy = AllReduceStrategyType::ONESHOT;
         }
         if (messageSize < 8 * 1000 * 1000)
         {
-            return AllReduceStrategyType::TWOSHOT;
+            strategy = AllReduceStrategyType::TWOSHOT;
         }
+    } else {
+      strategy = AllReduceStrategyType::RING;
     }
-
-    return AllReduceStrategyType::RING;
+    return static_cast<int>(strategy); 
 }
 
 void CustomAllReduce::enqueue(float* d_buffer, size_t dataSize) {
@@ -86,6 +90,6 @@ void CustomAllReduce::enqueue(float* d_buffer, size_t dataSize) {
 
     tensorrt_llm::kernels::customAllReduce(params, d_buffer, dataSize, sizeof(float),
                                            tensorrt_llm::common::datatype_enum::TYPE_FP32,
-                                           strategy, 0);
+                                           static_cast<tensorrt_llm::kernels::AllReduceStrategyType>(strategy), 0);
 }
 
