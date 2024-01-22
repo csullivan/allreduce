@@ -15,7 +15,7 @@ set(CUDA_INCLUDE_DIRS /usr/local/cuda-12.1/targets/x86_64-linux/include/)
 include(FetchContent)
 FetchContent_Declare(
   tensorrt_llm
-  GIT_REPOSITORY git@github.com:NVIDIA/TensorRT-LLM.git
+  GIT_REPOSITORY https://github.com/NVIDIA/TensorRT-LLM.git
   GIT_TAG v0.5.0
 )
 FetchContent_MakeAvailable(tensorrt_llm)
