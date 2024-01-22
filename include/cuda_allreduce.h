@@ -6,7 +6,7 @@
 
 class CustomAllReduce {
 public:
-  CustomAllReduce(int worldSize, int rank);
+  CustomAllReduce(int worldSize, int rank, ncclComm_t ncclComm);
   ~CustomAllReduce();
 
   void enqueue(float* d_buffer, size_t dataSize);

@@ -1,10 +1,10 @@
 #include "cuda_allreduce.h"
 
-CustomAllReduce::CustomAllReduce(int worldSize, int rank)
+CustomAllReduce::CustomAllReduce(int worldSize, int rank, ncclComm_t ncclComm)
   : m_world_size(worldSize), m_rank(rank), m_flag_value(2112),
-  m_buffer_ptrs(IPC_BUFFERS_SIZE, worldSize, rank),
-  m_input_barriers(IPC_BARRIERS_SIZE_PER_GPU * worldSize, worldSize, rank),
-  m_output_barriers(IPC_BARRIERS_SIZE_PER_GPU * worldSize, worldSize, rank)
+    m_buffer_ptrs(IPC_BUFFERS_SIZE, worldSize, rank, ncclComm),
+    m_input_barriers(IPC_BARRIERS_SIZE_PER_GPU * worldSize, worldSize, rank, ncclComm),
+    m_output_barriers(IPC_BARRIERS_SIZE_PER_GPU * worldSize, worldSize, rank, ncclComm)
 {}
 
 CustomAllReduce::~CustomAllReduce() {}

@@ -16,7 +16,7 @@ const char* BOLD_RED = "\033[1;31m";
 const char *RESET = "\033[0m";
   
 
-int test_one_shot_allreduce(int world_size, int rank) {
+int test_one_shot_allreduce(int world_size, int rank, ncclComm_t comm) {
     const int data_size = 16;
     float* d_buffer;
     float h_buffer[data_size];
@@ -28,7 +28,7 @@ int test_one_shot_allreduce(int world_size, int rank) {
     cudaMemcpy(d_buffer, h_buffer, data_size * sizeof(float), cudaMemcpyHostToDevice);
 
 
-    CustomAllReduce allReduce(world_size, rank);
+    CustomAllReduce allReduce(world_size, rank, comm);
     allReduce.enqueue(d_buffer, data_size);
 
     
@@ -57,12 +57,24 @@ int main(int argc, char* argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   cudaSetDevice(rank);
+  ncclComm_t comm;
+  ncclUniqueId id;
+  if(rank == 0) {
+    ncclGetUniqueId(&id);
+  }
+  // Broadcast the unique ID to other processes
+  MPI_Bcast(&id, sizeof(ncclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
+  cudaSetDevice(rank);
+  ncclCommInitRank(&comm, world_size, id, rank);
   
-  if (test_one_shot_allreduce(world_size, rank)) {
+  
+  if (test_one_shot_allreduce(world_size, rank, comm)) {
     std::cout << RED << "[FAILED]" << YELLOW << " test_one_shot_allreduce" << RESET << std::endl;
   } else {
     std::cout << GREEN << "[PASSED]" << YELLOW << " test_one_shot_allreduce" << RESET << std::endl;
   }
+
+  ncclCommDestroy(comm);
   MPI_Finalize();
   
   return 0;

@@ -44,16 +44,39 @@ target_link_libraries(customAllReduceKernels PRIVATE common_src)
 ### Build implementation of trt-llm's cuda allreduce
 find_package(MPI REQUIRED)
 find_package(CUDAToolkit)
+
+macro(find_nccl use_nccl)
+  set(NCCL_LIB_NAME nccl_static)
+  find_path(NCCL_INCLUDE_DIR NAMES nccl.h HINTS ${use_nccl} ${use_nccl}/include)
+  find_library(NCCL_LIBRARY NAMES nccl_static HINTS ${use_nccl} ${use_nccl}/lib)
+  include(FindPackageHandleStandardArgs)
+  find_package_handle_standard_args(Nccl DEFAULT_MSG NCCL_INCLUDE_DIR NCCL_LIBRARY)
+  if (Nccl_FOUND)
+    message(STATUS "Found NCCL_LIBRARY: ${NCCL_LIBRARY}")
+    message(STATUS "Found NCCL_INCLUDE_DIR: ${NCCL_INCLUDE_DIR}")
+    add_library(nccl SHARED IMPORTED)
+    set_target_properties(nccl
+      PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${NCCL_INCLUDE_DIR}"
+      IMPORTED_LOCATION             "${NCCL_LIBRARY}")
+  else()
+    message(STATUS "NCCL not found")
+  endif()
+  mark_as_advanced(NCCL_INCLUDE_DIR NCCL_LIBRARY)
+endmacro(find_nccl)
+
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(LIBRARY_FILES
     src/cuda_ipc_memory.cpp
     src/cuda_allreduce.cpp
 )
 add_library(trtllm_allreduce SHARED ${LIBRARY_FILES})
+find_nccl(/usr)
 target_link_libraries(trtllm_allreduce PRIVATE 
     CUDA::cudart
     customAllReduceKernels 
-    MPI::MPI_CXX
+    nccl
 )
 set(TEST_SOURCE_FILES
     tests/test_cuda_allreduce.cpp
