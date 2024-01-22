@@ -68,22 +68,21 @@ int CustomAllReduce::selectImplementation(size_t messageSize, int worldSize) noe
 }
 
 void CustomAllReduce::enqueue(float* d_buffer, size_t dataSize) {
-   m_flag_value++; // Increment the flag value
+  size_t messageSize = dataSize * sizeof(float);
+  auto strategy = selectImplementation(messageSize, m_world_size);
 
-    auto params = setupParams();
-    params.barrier_flag = m_flag_value;
+  m_flag_value++;  // Increment the flag value
 
-    size_t messageSize = dataSize * sizeof(float);
-    auto strategy = selectImplementation(messageSize, m_world_size);
+  auto params = setupParams();
+  params.barrier_flag = m_flag_value;
 
-    cudaStream_t stream(0);
-    tensorrt_llm::kernels::invokeMultiGpuBarrier(params, stream);
+  cudaStream_t stream(0);
+  tensorrt_llm::kernels::invokeMultiGpuBarrier(params, stream);
 
-    cudaMemcpyAsync(
-                 params.peer_comm_buffer_ptrs[m_rank], d_buffer, messageSize, cudaMemcpyDeviceToDevice, stream);
+  cudaMemcpyAsync(params.peer_comm_buffer_ptrs[m_rank], d_buffer, messageSize,
+                  cudaMemcpyDeviceToDevice, stream);
 
-    tensorrt_llm::kernels::customAllReduce(params, d_buffer, dataSize, sizeof(float),
-                                           tensorrt_llm::common::datatype_enum::TYPE_FP32,
-                                           static_cast<tensorrt_llm::kernels::AllReduceStrategyType>(strategy), 0);
+  tensorrt_llm::kernels::customAllReduce(
+      params, d_buffer, dataSize, sizeof(float), tensorrt_llm::common::datatype_enum::TYPE_FP32,
+      static_cast<tensorrt_llm::kernels::AllReduceStrategyType>(strategy), 0);
 }
-

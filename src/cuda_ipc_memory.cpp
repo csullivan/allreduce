@@ -1,9 +1,14 @@
-#include <cstring>
 #include "cuda_ipc_memory.h"
 
+#include <cstring>
+
 CUDAIpcMemory::CUDAIpcMemory(size_t bufferSize, int worldSize, int rank, ncclComm_t ncclComm)
-  : bufferSize(bufferSize), worldSize(worldSize), rank(rank), ipcHandles(worldSize), ncclComm(ncclComm) {
-    allocateAndShare();
+    : bufferSize(bufferSize),
+      worldSize(worldSize),
+      rank(rank),
+      ipcHandles(worldSize),
+      ncclComm(ncclComm) {
+  allocateAndShare();
 }
 
 CUDAIpcMemory::~CUDAIpcMemory() {
