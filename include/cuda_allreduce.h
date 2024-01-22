@@ -1,20 +1,24 @@
 #pragma once
 
-#include "cuda_ipc_memory.h"
 #include <nccl.h>
+
+#include <cstdint>
+
+#include "cuda_ipc_memory.h"
 
 namespace tensorrt_llm {
 namespace kernels {
-    struct AllReduceParams;
+struct AllReduceParams;
 }
-}
+}  // namespace tensorrt_llm
 
 class CustomAllReduce {
  public:
   CustomAllReduce(int worldSize, int rank, ncclComm_t ncclComm);
   ~CustomAllReduce();
 
-  void enqueue(float* d_buffer, size_t dataSize);
+  bool enqueue(void* input, void* output, int64_t num_elements, size_t type_size,
+               ncclDataType_t type, ncclRedOp_t op_type, cudaStream_t stream);
 
  private:
   int m_world_size;

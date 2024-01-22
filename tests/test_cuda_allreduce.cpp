@@ -24,9 +24,13 @@ int test_one_shot_allreduce(int world_size, int rank, ncclComm_t comm) {
     h_buffer[i] = static_cast<float>(rank + 1);
   }
   cudaMemcpy(d_buffer, h_buffer, data_size * sizeof(float), cudaMemcpyHostToDevice);
-
+  cudaStream_t stream(0);
   CustomAllReduce allReduce(world_size, rank, comm);
-  allReduce.enqueue(d_buffer, data_size);
+  if (!allReduce.enqueue(d_buffer, d_buffer, data_size, sizeof(float), ncclFloat32, ncclSum,
+                         stream)) {
+    std::cerr << BOLD_RED << "Requested All Reduce is unsupported" << std::endl;
+    return 1;
+  }
 
   cudaDeviceSynchronize();
   cudaMemcpy(result_buffer, d_buffer, data_size * sizeof(float), cudaMemcpyDeviceToHost);
