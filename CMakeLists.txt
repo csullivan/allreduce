@@ -42,7 +42,6 @@ add_library(customAllReduceKernels
 target_link_libraries(customAllReduceKernels PRIVATE common_src)
 
 ### Build implementation of trt-llm's cuda allreduce
-find_package(MPI REQUIRED)
 find_package(CUDAToolkit)
 
 macro(find_nccl use_nccl)
@@ -73,13 +72,17 @@ target_link_libraries(trtllm_allreduce PRIVATE
     customAllReduceKernels 
     ${NCCL_LIBRARY}
 )
-set(TEST_SOURCE_FILES
-    tests/test_cuda_allreduce.cpp
-)
-add_executable(test_cuda_allreduce ${TEST_SOURCE_FILES})
-target_link_libraries(test_cuda_allreduce PRIVATE 
-    trtllm_allreduce
-    CUDA::cudart
-    MPI::MPI_CXX
-)
+
+if (BUILD_TESTS)
+  find_package(MPI REQUIRED)
+  set(TEST_SOURCE_FILES
+      tests/test_cuda_allreduce.cpp
+  )
+  add_executable(test_cuda_allreduce ${TEST_SOURCE_FILES})
+  target_link_libraries(test_cuda_allreduce PRIVATE 
+      trtllm_allreduce
+      CUDA::cudart
+      MPI::MPI_CXX
+  )
+endif()
 
