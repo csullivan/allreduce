@@ -3,6 +3,7 @@
 #include <cassert>
 
 #include "tensorrt_llm/kernels/customAllReduceKernels.h"
+#include "tensorrt_llm/common/tensor.h"
 
 // #define CUDA_CALL(call)                                                                        \
 //   {                                                                                            \
@@ -13,6 +14,21 @@
 //       assert(cudaStatus == cudaSuccess);                                                       \
 //     }                                                                                          \
 //   }
+
+tensorrt_llm::common::datatype_enum select_type(ncclDataType_t ncclType) {
+    switch (ncclType) {
+        case ncclFloat32:
+            return tensorrt_llm::common::datatype_enum::TYPE_FP32;
+        case ncclFloat16:
+            return tensorrt_llm::common::datatype_enum::TYPE_FP16;
+        case ncclBfloat16:
+            return tensorrt_llm::common::datatype_enum::TYPE_BF16;
+        default:
+            std::cerr << "Unsupported NCCL to TRT_LLM datatype conversion" << std::endl;
+            return tensorrt_llm::common::datatype_enum::TYPE_INVALID;
+    }
+}
+
 
 CustomAllReduce::CustomAllReduce(int worldSize, int rank, ncclComm_t ncclComm)
     : m_world_size(worldSize),
@@ -120,8 +136,10 @@ bool CustomAllReduce::enqueue(void* input, void* output, int64_t num_elements, s
   cudaMemcpyAsync(params.peer_comm_buffer_ptrs[m_rank], input, messageSize,
                   cudaMemcpyDeviceToDevice, stream);
 
+  tensorrt_llm::common::datatype_enum trt_type = select_type(type);
+
   tensorrt_llm::kernels::customAllReduce(
-      params, output, num_elements, type_size, tensorrt_llm::common::datatype_enum::TYPE_FP32,
+      params, output, num_elements, type_size, trt_type,
       static_cast<tensorrt_llm::kernels::AllReduceStrategyType>(strategy), 0);
   return true;
 }
