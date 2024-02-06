@@ -75,11 +75,14 @@ target_link_libraries(trtllm_allreduce PRIVATE
 
 if (BUILD_TESTS)
   find_package(MPI REQUIRED)
-  set(TEST_SOURCE_FILES
-      tests/test_cuda_allreduce.cpp
-  )
-  add_executable(test_cuda_allreduce ${TEST_SOURCE_FILES})
+  add_executable(test_cuda_allreduce tests/test_cuda_allreduce.cpp)
   target_link_libraries(test_cuda_allreduce PRIVATE 
+      trtllm_allreduce
+      CUDA::cudart
+      MPI::MPI_CXX
+  )
+  add_executable(benchmark_cuda_allreduce tests/benchmark_cuda_allreduce.cpp)
+  target_link_libraries(benchmark_cuda_allreduce PRIVATE 
       trtllm_allreduce
       CUDA::cudart
       MPI::MPI_CXX
