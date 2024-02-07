@@ -31,15 +31,17 @@ list(REMOVE_ITEM SUBPROJECT_SRCS "${SUBPROJECT_SOURCE_DIR}/cudaAllocator.cpp")
 include_directories(${tensorrt_llm_SOURCE_DIR}/cpp/include/ ${tensorrt_llm_SOURCE_DIR}/cpp ${CUDA_INCLUDE_DIRS})
 
 # Add common sources to a lib
-add_library(common_src OBJECT ${SUBPROJECT_SRCS} ${SUBPROJECT_CU_SRCS})
-set_property(TARGET common_src PROPERTY POSITION_INDEPENDENT_CODE ON)
-set_property(TARGET common_src PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+add_library(tensorrt_llm_common OBJECT ${SUBPROJECT_SRCS} ${SUBPROJECT_CU_SRCS})
+target_compile_definitions(tensorrt_llm_common PRIVATE -DENABLE_FP8 -DENABLE_BF16)
+
+set_property(TARGET tensorrt_llm_common PROPERTY POSITION_INDEPENDENT_CODE ON)
+set_property(TARGET tensorrt_llm_common PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 set(SUBPROJECT_BINARY_DIR ${CMAKE_BINARY_DIR}/tensorrt_llm_common_build)
 
 # Add the custom all reduce kernels to a lib
 add_library(customAllReduceKernels
     ${tensorrt_llm_SOURCE_DIR}/cpp/tensorrt_llm/kernels/customAllReduceKernels.cu)
-target_link_libraries(customAllReduceKernels PRIVATE common_src)
+target_link_libraries(customAllReduceKernels PRIVATE tensorrt_llm_common)
 
 ### Build implementation of trt-llm's cuda allreduce
 find_package(CUDAToolkit)
@@ -73,6 +75,14 @@ target_link_libraries(trtllm_allreduce PRIVATE
     ${NCCL_LIBRARY}
 )
 
+
+add_library(tensorrt_llm_fp8 SHARED src/cuda_fp8.cpp)
+target_compile_definitions(tensorrt_llm_fp8 PRIVATE -DENABLE_FP8 -DENABLE_BF16)
+target_link_libraries(tensorrt_llm_fp8 PRIVATE 
+    CUDA::cudart
+    tensorrt_llm_common
+)
+
 if (BUILD_TESTS)
   find_package(MPI REQUIRED)
   add_executable(test_cuda_allreduce tests/test_cuda_allreduce.cpp)
@@ -90,6 +100,7 @@ if (BUILD_TESTS)
   add_executable(test_fp8 tests/test_fp8.cu)
   target_link_libraries(test_fp8 PRIVATE 
       CUDA::cudart
+      tensorrt_llm_fp8
   )
 endif()
 
