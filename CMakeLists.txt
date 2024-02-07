@@ -87,5 +87,9 @@ if (BUILD_TESTS)
       CUDA::cudart
       MPI::MPI_CXX
   )
+  add_executable(test_fp8 tests/test_fp8.cu)
+  target_link_libraries(test_fp8 PRIVATE 
+      CUDA::cudart
+  )
 endif()
 
