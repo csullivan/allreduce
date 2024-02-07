@@ -1,9 +1,10 @@
+#include <cuda_fp8.h>
+#include <cuda_runtime.h>
+
 #include <cassert>
 #include <cstring>
 #include <iostream>
 #include <vector>
-
-#include "cuda_runtime.h"
 
 const char* RED = "\033[31m";
 const char* GREEN = "\033[32m";
@@ -81,7 +82,31 @@ int test_ptx() {
   return 0;
 }
 
+__global__ void testFp8Conversion() {
+  __half2_raw input = __floats2half2_rn(1.0f, 0.5f);
+  __nv_fp8x2_storage_t fp8x2 = __nv_cvt_halfraw2_to_fp8x2(input, __NV_SATFINITE, __NV_E5M2);
+  __half2_raw output = __nv_cvt_fp8x2_to_halfraw2(fp8x2, __NV_E5M2);
+  assert(input.x == output.x && input.y == output.y);
+}
+
+int test_fp8_conversion() {
+  testFp8Conversion<<<1, 1>>>();
+
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    std::cerr << BOLD_RED << "CUDA error: " << cudaGetErrorString(err) << std::endl;
+    std::cerr << RED << "[FAILED]" << YELLOW << " test_fp8_conversion" << RESET << std::endl;
+    return -1;
+  }
+
+  cudaDeviceSynchronize();
+
+  std::cout << GREEN << "[PASSED]" << YELLOW << " test_fp8_conversion" << RESET << std::endl;
+  return 0;
+}
+
 int main(int argc, char* argv[]) {
-  test_ptx();
+  // test_ptx();
+  test_fp8_conversion();
   return 0;
 }
