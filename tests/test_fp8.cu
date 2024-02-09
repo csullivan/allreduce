@@ -6,11 +6,100 @@
 #include <iostream>
 #include <vector>
 
+using fp8_e4_2_t = __nv_fp8x2_e4m3;
+
 const char* RED = "\033[31m";
 const char* GREEN = "\033[32m";
 const char* YELLOW = "\033[33m";
 const char* BOLD_RED = "\033[1;31m";
 const char* RESET = "\033[0m";
+
+struct half4_2 {
+  __half2 lo;
+  __half2 hi;
+
+  __host__ __device__ half4_2() : lo(), hi() {}
+  __host__ __device__ half4_2(__half2 lo, __half2 hi) : lo(lo), hi(hi) {}
+  __host__ __device__ explicit half4_2(const __nv_fp8x4_e4m3& fp8x4) {
+    __nv_fp8x2_e4m3 lo_part, hi_part;
+    lo_part.__x = static_cast<__nv_fp8x2_storage_t>(fp8x4.__x & 0xFFFF);
+    hi_part.__x = static_cast<__nv_fp8x2_storage_t>(fp8x4.__x >> 16);
+    lo = static_cast<__half2>(lo_part);
+    hi = static_cast<__half2>(hi_part);
+  }
+
+  __host__ __device__ explicit operator __nv_fp8x4_e4m3() const {
+    __nv_fp8x4_e4m3 result;
+    __nv_fp8x2_e4m3 lo_part(lo), hi_part(hi);
+    result.__x =
+        (static_cast<__uint32_t>(hi_part.__x) << 16) | static_cast<__uint32_t>(lo_part.__x);
+    return result;
+  }
+};
+
+// struct half4 {
+//   __half x, y, z, w;
+
+//   // Default constructor
+//   __host__ __device__ half4() : x(__half(0)), y(__half(0)), z(__half(0)), w(__half(0)) {}
+
+//   // Constructor from individual __half values
+//   __host__ __device__ half4(__half x, __half y, __half z, __half w) : x(x), y(y), z(z), w(w) {}
+
+//   // Explicit constructor from __nv_fp8x4_e4m3
+//   __host__ __device__ explicit half4(const __nv_fp8x4_e4m3& fp8x4) {
+//     // Extract each fp8 component from the __nv_fp8x4_e4m3 storage and convert to __half
+//     x = __half(__nv_fp8_e4m3(static_cast<__nv_fp8_storage_t>(fp8x4.__x & 0xFF)));
+//     y = __half(__nv_fp8_e4m3(static_cast<__nv_fp8_storage_t>((fp8x4.__x >> 8) & 0xFF)));
+//     z = __half(__nv_fp8_e4m3(static_cast<__nv_fp8_storage_t>((fp8x4.__x >> 16) & 0xFF)));
+//     w = __half(__nv_fp8_e4m3(static_cast<__nv_fp8_storage_t>((fp8x4.__x >> 24) & 0xFF)));
+//   }
+
+//   // Explicit conversion operator to __nv_fp8x4_e4m3
+//   __host__ __device__ explicit operator __nv_fp8x4_e4m3() const {
+//     __nv_fp8x4_e4m3 result;
+//     // Convert each __half to __nv_fp8_e4m3 and then pack into __nv_fp8x4_e4m3 storage
+//     result.__x = (__nv_fp8_storage_t(__nv_fp8_e4m3(x).__x) |
+//                   (__nv_fp8_storage_t(__nv_fp8_e4m3(y).__x) << 8) |
+//                   (__nv_fp8_storage_t(__nv_fp8_e4m3(z).__x) << 16) |
+//                   (__nv_fp8_storage_t(__nv_fp8_e4m3(w).__x) << 24));
+//     return result;
+//   }
+// };
+
+struct half4 {
+  __half x, y, z, w;
+
+  __host__ __device__ half4() : x(__half(0)), y(__half(0)), z(__half(0)), w(__half(0)) {}
+
+  __host__ __device__ half4(__half x, __half y, __half z, __half w) : x(x), y(y), z(z), w(w) {}
+
+  __host__ __device__ explicit half4(const __nv_fp8x4_e4m3& fp8x4) {
+    __nv_fp8x2_e4m3 lo_part, hi_part;
+    lo_part.__x = static_cast<__nv_fp8x2_storage_t>(fp8x4.__x & 0xFFFF);
+    hi_part.__x = static_cast<__nv_fp8x2_storage_t>((fp8x4.__x >> 16) & 0xFFFF);
+
+    __half2 lo_half2 = static_cast<__half2>(lo_part);
+    __half2 hi_half2 = static_cast<__half2>(hi_part);
+
+    x = reinterpret_cast<__half*>(&lo_half2)[0];
+    y = reinterpret_cast<__half*>(&lo_half2)[1];
+    z = reinterpret_cast<__half*>(&hi_half2)[0];
+    w = reinterpret_cast<__half*>(&hi_half2)[1];
+  }
+
+  __host__ __device__ explicit operator __nv_fp8x4_e4m3() const {
+    __nv_fp8x4_e4m3 result;
+
+    __half2 lo_half2 = *reinterpret_cast<const __half2*>(&x);
+    __half2 hi_half2 = *reinterpret_cast<const __half2*>(&z);
+
+    __nv_fp8x2_e4m3 lo_part(lo_half2), hi_part(hi_half2);
+    result.__x =
+        (static_cast<__uint32_t>(lo_part.__x) | (static_cast<__uint32_t>(hi_part.__x) << 16));
+    return result;
+  }
+};
 
 __global__ void vectorAddPTX(const float* A, const float* B, float* C, int numElements) {
   int i = blockDim.x * blockIdx.x + threadIdx.x;
@@ -104,9 +193,125 @@ int test_fp8_conversion() {
   std::cout << GREEN << "[PASSED]" << YELLOW << " test_fp8_conversion" << RESET << std::endl;
   return 0;
 }
+__global__ void testFp8VectorConversion() {
+  half2 h_;
+  h_.x = 5.75;
+  h_.y = 1.33;
+  printf("h_.x = %f\n", __half2float(h_.x));
+  printf("h_.y = %f\n", __half2float(h_.y));
+
+  fp8_e4_2_t v_ = (fp8_e4_2_t)(h_);
+  h_ = (half2)(v_);
+
+  printf("h_.x = %f\n", __half2float(h_.x));
+  printf("h_.y = %f\n", __half2float(h_.y));
+}
+
+int test_fp8_vector_conversion() {
+  testFp8VectorConversion<<<1, 1>>>();
+
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    std::cerr << BOLD_RED << "CUDA error: " << cudaGetErrorString(err) << std::endl;
+    std::cerr << RED << "[FAILED]" << YELLOW << " test_fp8_conversion" << RESET << std::endl;
+    return -1;
+  }
+
+  cudaDeviceSynchronize();
+
+  std::cout << GREEN << "[PASSED]" << YELLOW << " test_fp8_vector_conversion" << RESET << std::endl;
+  return 0;
+}
+
+__global__ void testFp8x4Half4_2_RoundTrip() {
+  // Test values for half4
+  __half2 lo;
+  lo.x = 3.88;
+  lo.y = 1.23;
+  __half2 hi;
+  hi.x = 5.2;
+  hi.y = 4;
+
+  half4_2 original_half4(lo, hi);
+
+  __nv_fp8x4_e4m3 converted_fp8x4 = static_cast<__nv_fp8x4_e4m3>(original_half4);
+  half4_2 round_trip_half4 = static_cast<half4_2>(converted_fp8x4);
+
+  printf("h4.lo.x = %f\n", __half2float(original_half4.lo.x));
+  printf("h4.lo.y = %f\n", __half2float(original_half4.lo.y));
+  printf("h4.hi.x = %f\n", __half2float(original_half4.hi.x));
+  printf("h4.hi.y = %f\n\n", __half2float(original_half4.hi.y));
+
+  printf("h4.lo.x = %f\n", __half2float(round_trip_half4.lo.x));
+  printf("h4.lo.y = %f\n", __half2float(round_trip_half4.lo.y));
+  printf("h4.hi.x = %f\n", __half2float(round_trip_half4.hi.x));
+  printf("h4.hi.y = %f\n", __half2float(round_trip_half4.hi.y));
+}
+
+__global__ void testFp8x4Half4RoundTrip() {
+  // Test values for half4
+  __half x = 3.88;
+  __half y = 1.23;
+  __half z = 5.2;
+  __half w = 4;
+
+  half4 original_half4(x, y, z, w);
+
+  __nv_fp8x4_e4m3 converted_fp8x4 = static_cast<__nv_fp8x4_e4m3>(original_half4);
+  half4 round_trip_half4 = static_cast<half4>(converted_fp8x4);
+
+  printf("h4.x = %f\n", __half2float(original_half4.x));
+  printf("h4.y = %f\n", __half2float(original_half4.y));
+  printf("h4.z = %f\n", __half2float(original_half4.z));
+  printf("h4.w = %f\n\n", __half2float(original_half4.w));
+
+  printf("h4.x = %f\n", __half2float(round_trip_half4.x));
+  printf("h4.y = %f\n", __half2float(round_trip_half4.y));
+  printf("h4.z = %f\n", __half2float(round_trip_half4.z));
+  printf("h4.w = %f\n", __half2float(round_trip_half4.w));
+}
+
+int test_fp8x4_half4_2_conversion() {
+  testFp8x4Half4_2_RoundTrip<<<1, 1>>>();
+
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    std::cerr << BOLD_RED << "CUDA error: " << cudaGetErrorString(err) << std::endl;
+    std::cerr << RED << "[FAILED]" << YELLOW << " test_fp8x4_half4_2_conversion" << RESET
+              << std::endl;
+    return -1;
+  }
+
+  cudaDeviceSynchronize();
+
+  std::cout << GREEN << "[PASSED]" << YELLOW << " test_fp8x4_half4_2_conversion" << RESET
+            << std::endl;
+  return 0;
+}
+
+int test_fp8x4_half4_conversion() {
+  testFp8x4Half4RoundTrip<<<1, 1>>>();
+
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    std::cerr << BOLD_RED << "CUDA error: " << cudaGetErrorString(err) << std::endl;
+    std::cerr << RED << "[FAILED]" << YELLOW << " test_fp8x4_half4_conversion" << RESET
+              << std::endl;
+    return -1;
+  }
+
+  cudaDeviceSynchronize();
+
+  std::cout << GREEN << "[PASSED]" << YELLOW << " test_fp8x4_half4_conversion" << RESET
+            << std::endl;
+  return 0;
+}
 
 int main(int argc, char* argv[]) {
   // test_ptx();
-  test_fp8_conversion();
+  // test_fp8_conversion();
+  // test_fp8_vector_conversion();
+  // test_fp8x4_half4_2_conversion();
+  test_fp8x4_half4_conversion();
   return 0;
 }
