@@ -14,7 +14,7 @@ const char* YELLOW = "\033[33m";
 const char* BOLD_RED = "\033[1;31m";
 const char* RESET = "\033[0m";
 
-struct half4_2 {
+struct __align__(4) half4_2 {
   __half2 lo;
   __half2 hi;
 
@@ -37,37 +37,7 @@ struct half4_2 {
   }
 };
 
-// struct half4 {
-//   __half x, y, z, w;
-
-//   // Default constructor
-//   __host__ __device__ half4() : x(__half(0)), y(__half(0)), z(__half(0)), w(__half(0)) {}
-
-//   // Constructor from individual __half values
-//   __host__ __device__ half4(__half x, __half y, __half z, __half w) : x(x), y(y), z(z), w(w) {}
-
-//   // Explicit constructor from __nv_fp8x4_e4m3
-//   __host__ __device__ explicit half4(const __nv_fp8x4_e4m3& fp8x4) {
-//     // Extract each fp8 component from the __nv_fp8x4_e4m3 storage and convert to __half
-//     x = __half(__nv_fp8_e4m3(static_cast<__nv_fp8_storage_t>(fp8x4.__x & 0xFF)));
-//     y = __half(__nv_fp8_e4m3(static_cast<__nv_fp8_storage_t>((fp8x4.__x >> 8) & 0xFF)));
-//     z = __half(__nv_fp8_e4m3(static_cast<__nv_fp8_storage_t>((fp8x4.__x >> 16) & 0xFF)));
-//     w = __half(__nv_fp8_e4m3(static_cast<__nv_fp8_storage_t>((fp8x4.__x >> 24) & 0xFF)));
-//   }
-
-//   // Explicit conversion operator to __nv_fp8x4_e4m3
-//   __host__ __device__ explicit operator __nv_fp8x4_e4m3() const {
-//     __nv_fp8x4_e4m3 result;
-//     // Convert each __half to __nv_fp8_e4m3 and then pack into __nv_fp8x4_e4m3 storage
-//     result.__x = (__nv_fp8_storage_t(__nv_fp8_e4m3(x).__x) |
-//                   (__nv_fp8_storage_t(__nv_fp8_e4m3(y).__x) << 8) |
-//                   (__nv_fp8_storage_t(__nv_fp8_e4m3(z).__x) << 16) |
-//                   (__nv_fp8_storage_t(__nv_fp8_e4m3(w).__x) << 24));
-//     return result;
-//   }
-// };
-
-struct half4 {
+struct __align__(4) half4 {
   __half x, y, z, w;
 
   __host__ __device__ half4() : x(__half(0)), y(__half(0)), z(__half(0)), w(__half(0)) {}
