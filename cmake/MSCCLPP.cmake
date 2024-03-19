@@ -33,4 +33,22 @@ if (BUILD_MPI_TESTS)
       CUDA::cudart
       MPI::MPI_CXX
   )
+
+  add_executable(test_mscclpp_allreduce tests/test_mscclpp_allreduce.cpp)
+  target_link_libraries(test_mscclpp_allreduce PRIVATE 
+      mscclpp
+      mscclpp_nccl
+      mscclpp_allreduce
+      CUDA::cudart
+      MPI::MPI_CXX
+  )
+
+  add_executable(benchmark_mscclpp_allreduce tests/benchmark_mscclpp_allreduce.cpp)
+  target_link_libraries(benchmark_mscclpp_allreduce PRIVATE 
+      mscclpp
+      mscclpp_nccl
+      mscclpp_allreduce
+      CUDA::cudart
+      MPI::MPI_CXX
+  )
 endif()
