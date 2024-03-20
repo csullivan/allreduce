@@ -16,7 +16,7 @@ const char* RESET = "\033[0m";
 
 // Benchmark function for a single data size.
 template <typename ALLREDUCE_T>
-double benchmark_allreduce(int world_size, int rank, ncclComm_t comm, int data_size) {
+double benchmark_allreduce(int world_size, int rank, mscclComm_t comm, int data_size) {
   float* d_buffer;
   float* o_buffer;
   cudaMalloc(&d_buffer, data_size * sizeof(float));
@@ -36,8 +36,8 @@ double benchmark_allreduce(int world_size, int rank, ncclComm_t comm, int data_s
 
   size_t num_warmup = 10;
   for (int i = 0; i < num_warmup; ++i) {
-    if (allReduce.enqueue(d_buffer, o_buffer, data_size, sizeof(float), ncclFloat32, ncclSum,
-                          stream) != ncclSuccess) {
+    if (allReduce.enqueue(d_buffer, o_buffer, data_size, sizeof(float), mscclFloat32, mscclSum,
+                          stream) != mscclSuccess) {
       throw std::runtime_error("Kernel failed");
     }
     // cudaStreamSynchronize(stream);
@@ -65,8 +65,8 @@ double benchmark_allreduce(int world_size, int rank, ncclComm_t comm, int data_s
   size_t num_iterations = 100;
   auto start = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < num_iterations; ++i) {
-    if (allReduce.enqueue(d_buffer, o_buffer, data_size, sizeof(float), ncclFloat32, ncclSum,
-                          stream) != ncclSuccess) {
+    if (allReduce.enqueue(d_buffer, o_buffer, data_size, sizeof(float), mscclFloat32, mscclSum,
+                          stream) != mscclSuccess) {
       throw std::runtime_error("Kernel failed");
     }
     // cudaStreamSynchronize(stream);
@@ -88,13 +88,13 @@ int main(int argc, char* argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   cudaSetDevice(rank);
-  ncclComm_t comm;
-  ncclUniqueId id;
+  mscclComm_t comm;
+  mscclUniqueId id;
   if (rank == 0) {
-    ncclGetUniqueId(&id);
+    mscclGetUniqueId(&id);
   }
-  MPI_Bcast(&id, sizeof(ncclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
-  ncclCommInitRank(&comm, world_size, id, rank);
+  MPI_Bcast(&id, sizeof(mscclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
+  mscclCommInitRank(&comm, world_size, id, rank);
 
   for (int exp = 12; exp < 24; exp++) {
     int data_size = 1 << exp;
@@ -109,7 +109,7 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  // ncclCommDestroy(comm);
+  // mscclCommDestroy(comm);
   MPI_Finalize();
 
   return 0;

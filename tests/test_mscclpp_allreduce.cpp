@@ -14,7 +14,7 @@ const char* BOLD_RED = "\033[1;31m";
 const char* RESET = "\033[0m";
 
 template <typename ALLREDUCE_T>
-int test_allreduce(int world_size, int rank, ncclComm_t comm) {
+int test_allreduce(int world_size, int rank, mscclComm_t comm) {
   const int data_size = 16;
   float* d_buffer;
   float h_buffer[data_size];
@@ -26,8 +26,8 @@ int test_allreduce(int world_size, int rank, ncclComm_t comm) {
   cudaMemcpy(d_buffer, h_buffer, data_size * sizeof(float), cudaMemcpyHostToDevice);
   cudaStream_t stream(0);
   ALLREDUCE_T allReduce(world_size, rank, comm);
-  if (allReduce.enqueue(d_buffer, d_buffer, data_size, sizeof(float), ncclFloat32, ncclSum,
-                        stream) != ncclSuccess) {
+  if (allReduce.enqueue(d_buffer, d_buffer, data_size, sizeof(float), mscclFloat32, mscclSum,
+                        stream) != mscclSuccess) {
     std::cerr << BOLD_RED << "Requested All Reduce is unsupported" << std::endl;
     return 1;
   }
@@ -59,15 +59,15 @@ int main(int argc, char* argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   cudaSetDevice(rank);
-  ncclComm_t comm;
-  ncclUniqueId id;
+  mscclComm_t comm;
+  mscclUniqueId id;
   if (rank == 0) {
-    ncclGetUniqueId(&id);
+    mscclGetUniqueId(&id);
   }
   // Broadcast the unique ID to other processes
-  MPI_Bcast(&id, sizeof(ncclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&id, sizeof(mscclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
   cudaSetDevice(rank);
-  ncclCommInitRank(&comm, world_size, id, rank);
+  mscclCommInitRank(&comm, world_size, id, rank);
 
   if (test_allreduce<MscclppAllReduce>(world_size, rank, comm)) {
     std::cout << RED << "[FAILED]" << YELLOW << " test_allreduce" << RESET << std::endl;
@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
     std::cout << GREEN << "[PASSED]" << YELLOW << " test_allreduce" << RESET << std::endl;
   }
 
-  ncclCommDestroy(comm);
+  mscclCommDestroy(comm);
   MPI_Finalize();
 
   return 0;

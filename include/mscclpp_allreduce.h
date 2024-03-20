@@ -2,19 +2,19 @@
 
 #include <iostream>
 
-#include "nccl.h"
+#include "msccl.h"
 
 class MscclppAllReduce {
  public:
-  MscclppAllReduce(int worldSize, int rank, ncclComm_t comm);
+  MscclppAllReduce(int worldSize, int rank, mscclComm_t comm);
   ~MscclppAllReduce();
 
-  ncclResult_t enqueue(void* input, void* output, int64_t num_elements, size_t type_size,
-                       ncclDataType_t type, ncclRedOp_t op_type, cudaStream_t stream);
+  mscclResult_t enqueue(void* input, void* output, int64_t num_elements, size_t type_size,
+                        mscclDataType_t type, mscclRedOp_t op_type, cudaStream_t stream);
 
  private:
   int m_world_size;
   int m_rank;
   unsigned int m_flag_value;
-  ncclComm_t m_comm;
+  mscclComm_t m_comm;
 };

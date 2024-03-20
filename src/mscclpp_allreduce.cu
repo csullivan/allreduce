@@ -36,7 +36,7 @@ struct ChannelInfo {
   std::shared_ptr<mscclpp::DeviceHandle<mscclpp::SmChannel>> smOutChannelDeviceHandles;
 };
 
-struct ncclComm {
+struct mscclComm {
   std::shared_ptr<mscclpp::Communicator> comm;
   std::vector<std::shared_ptr<mscclpp::Connection>> connections;
   std::vector<std::shared_ptr<mscclpp::SmDevice2DeviceSemaphore>> smSemaphores;
@@ -46,13 +46,13 @@ struct ncclComm {
   std::vector<mscclpp::RegisteredMemory> remoteScratchRegMemories;
 };
 
-MscclppAllReduce::MscclppAllReduce(int worldSize, int rank, ncclComm_t comm)
+MscclppAllReduce::MscclppAllReduce(int worldSize, int rank, mscclComm_t comm)
     : m_world_size(worldSize), m_rank(rank), m_flag_value(1), m_comm(comm) {}
 
 MscclppAllReduce::~MscclppAllReduce() {}
 
 static std::vector<mscclpp::SmChannel> setupSmChannels(
-    ncclComm_t comm, const std::vector<mscclpp::RegisteredMemory>& remoteMemories, void* src) {
+    mscclComm_t comm, const std::vector<mscclpp::RegisteredMemory>& remoteMemories, void* src) {
   std::vector<mscclpp::SmChannel> channels;
   std::vector<std::shared_ptr<mscclpp::SmDevice2DeviceSemaphore>>& smSemaphores =
       comm->smSemaphores;
@@ -231,16 +231,16 @@ __global__ void __launch_bounds__(1024, 1)
 
 }  // namespace
 
-ncclResult_t MscclppAllReduce::enqueue(void* input, void* output, int64_t num_elements,
-                                       size_t type_size, ncclDataType_t datatype,
-                                       ncclRedOp_t op_type, cudaStream_t stream) {
+mscclResult_t MscclppAllReduce::enqueue(void* input, void* output, int64_t num_elements,
+                                        size_t type_size, mscclDataType_t datatype,
+                                        mscclRedOp_t op_type, cudaStream_t stream) {
   size_t bytes = num_elements * type_size;
   if (input == nullptr || output == nullptr || bytes == 0 || m_comm == nullptr) {
-    return ncclInvalidArgument;
+    return mscclInvalidArgument;
   }
-  // TODO(csullivan): Need to evaluate ross over point with nccl -- likely around 2**20
+  // TODO(csullivan): Need to evaluate cross over point with msccl -- likely around 2**20
   if (bytes > (1 << 24)) {
-    return ncclInvalidArgument;
+    return mscclInvalidArgument;
   }
   int rank = m_comm->comm->bootstrap()->getRank();
   channelKey key{input, output, bytes};
@@ -260,12 +260,12 @@ ncclResult_t MscclppAllReduce::enqueue(void* input, void* output, int64_t num_el
   int num_blocks = 105;
   int num_threads = 1024;
   switch (datatype) {
-    case ncclFloat16:
+    case mscclFloat16:
       allreduce_simple<<<num_blocks, num_threads, 0, stream>>>(
           smChannels, (half*)input, (half*)m_comm->scratchBuff.get(), (half*)output, m_rank,
           m_world_size, num_elements);
       break;
-    case ncclFloat32:
+    case mscclFloat32:
       allreduce_simple<<<num_blocks, num_threads, 0, stream>>>(
           smChannels, (float*)input, (float*)m_comm->scratchBuff.get(), (float*)output, m_rank,
           m_world_size, num_elements);
@@ -273,7 +273,7 @@ ncclResult_t MscclppAllReduce::enqueue(void* input, void* output, int64_t num_el
     default:
       std::cout << 1 << std::endl;
 
-      return ncclInvalidArgument;
+      return mscclInvalidArgument;
   }
-  return ncclSuccess;
+  return mscclSuccess;
 }

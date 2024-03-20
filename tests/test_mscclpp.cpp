@@ -11,20 +11,20 @@ int main(int argc, char* argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   cudaSetDevice(rank);
-  ncclComm_t comm;
-  ncclUniqueId id;
+  mscclComm_t comm;
+  mscclUniqueId id;
   if (rank == 0) {
-    ncclGetUniqueId(&id);
+    mscclGetUniqueId(&id);
   }
 
   // Broadcast the unique ID to other processes
-  MPI_Bcast(&id, sizeof(ncclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&id, sizeof(mscclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
   cudaSetDevice(rank);
-  ncclCommInitRank(&comm, world_size, id, rank);
+  mscclCommInitRank(&comm, world_size, id, rank);
 
   MscclppAllReduce(world_size, rank, comm);
 
-  ncclCommDestroy(comm);
+  mscclCommDestroy(comm);
   MPI_Finalize();
 
   return 0;
