@@ -15,7 +15,6 @@ const char* YELLOW = "\033[33m";
 const char* RESET = "\033[0m";
 
 // Benchmark function for a single data size.
-template <typename ALLREDUCE_T>
 double benchmark_allreduce(int world_size, int rank, mscclComm_t comm, int data_size) {
   float* d_buffer;
   float* o_buffer;
@@ -32,15 +31,10 @@ double benchmark_allreduce(int world_size, int rank, mscclComm_t comm, int data_
   cudaMemcpy(d_buffer, h_buffer.data(), data_size * sizeof(float), cudaMemcpyHostToDevice);
 
   cudaStream_t stream(0);
-  ALLREDUCE_T allReduce(world_size, rank, comm);
 
   size_t num_warmup = 10;
   for (int i = 0; i < num_warmup; ++i) {
-    if (allReduce.enqueue(d_buffer, o_buffer, data_size, sizeof(float), mscclFloat32, mscclSum,
-                          stream) != mscclSuccess) {
-      throw std::runtime_error("Kernel failed");
-    }
-    // cudaStreamSynchronize(stream);
+    mscclAllReduce(d_buffer, o_buffer, data_size, mscclFloat32, mscclSum, comm, stream);
   }
   cudaDeviceSynchronize();
   cudaMemcpy(result_buffer.data(), o_buffer, data_size * sizeof(float), cudaMemcpyDeviceToHost);
@@ -65,11 +59,7 @@ double benchmark_allreduce(int world_size, int rank, mscclComm_t comm, int data_
   size_t num_iterations = 100;
   auto start = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < num_iterations; ++i) {
-    if (allReduce.enqueue(d_buffer, o_buffer, data_size, sizeof(float), mscclFloat32, mscclSum,
-                          stream) != mscclSuccess) {
-      throw std::runtime_error("Kernel failed");
-    }
-    // cudaStreamSynchronize(stream);
+    mscclAllReduce(d_buffer, o_buffer, data_size, mscclFloat32, mscclSum, comm, stream);
   }
 
   auto end = std::chrono::high_resolution_clock::now();
@@ -98,8 +88,7 @@ int main(int argc, char* argv[]) {
 
   for (int exp = 12; exp < 24; exp++) {
     int data_size = 1 << exp;
-    double avg_duration =
-        benchmark_allreduce<MscclppAllReduce>(world_size, rank, comm, data_size / sizeof(float));
+    double avg_duration = benchmark_allreduce(world_size, rank, comm, data_size / sizeof(float));
     double data_size_mb = data_size / static_cast<double>(1024 * 1024);
     double bandwidth_mb_s = (data_size_mb / avg_duration);
     if (rank == 0) {

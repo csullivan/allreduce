@@ -13,7 +13,6 @@ const char* YELLOW = "\033[33m";
 const char* BOLD_RED = "\033[1;31m";
 const char* RESET = "\033[0m";
 
-template <typename ALLREDUCE_T>
 int test_allreduce(int world_size, int rank, mscclComm_t comm) {
   const int data_size = 16;
   float* d_buffer;
@@ -25,12 +24,8 @@ int test_allreduce(int world_size, int rank, mscclComm_t comm) {
   }
   cudaMemcpy(d_buffer, h_buffer, data_size * sizeof(float), cudaMemcpyHostToDevice);
   cudaStream_t stream(0);
-  ALLREDUCE_T allReduce(world_size, rank, comm);
-  if (allReduce.enqueue(d_buffer, d_buffer, data_size, sizeof(float), mscclFloat32, mscclSum,
-                        stream) != mscclSuccess) {
-    std::cerr << BOLD_RED << "Requested All Reduce is unsupported" << std::endl;
-    return 1;
-  }
+
+  mscclAllReduce(d_buffer, d_buffer, data_size, mscclFloat32, mscclSum, comm, stream);
 
   cudaDeviceSynchronize();
   cudaMemcpy(result_buffer, d_buffer, data_size * sizeof(float), cudaMemcpyDeviceToHost);
@@ -69,7 +64,7 @@ int main(int argc, char* argv[]) {
   cudaSetDevice(rank);
   mscclCommInitRank(&comm, world_size, id, rank);
 
-  if (test_allreduce<MscclppAllReduce>(world_size, rank, comm)) {
+  if (test_allreduce(world_size, rank, comm)) {
     std::cout << RED << "[FAILED]" << YELLOW << " test_allreduce" << RESET << std::endl;
   } else {
     std::cout << GREEN << "[PASSED]" << YELLOW << " test_allreduce" << RESET << std::endl;
